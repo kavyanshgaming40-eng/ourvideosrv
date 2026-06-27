@@ -218,6 +218,25 @@ class EmptyStateWidget(QWidget):
         layout.addWidget(self.info_label)
 
 
+class ClickableSlider(QSlider):
+    def __init__(self, orientation, parent=None):
+        super().__init__(orientation, parent)
+        
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self.orientation() == Qt.Orientation.Horizontal:
+                val = self.minimum() + ((self.maximum() - self.minimum()) * event.position().x()) / self.width()
+            else:
+                val = self.minimum() + ((self.maximum() - self.minimum()) * (self.height() - event.position().y())) / self.height()
+            
+            val = max(self.minimum(), min(self.maximum(), int(val)))
+            self.setValue(val)
+            self.sliderMoved.emit(val)
+            super().mousePressEvent(event)
+        else:
+            super().mousePressEvent(event)
+
+
 class ConnectionDialog(QDialog):
     def __init__(self, parent, current_url, current_code):
         super().__init__(parent)
@@ -660,7 +679,7 @@ class MainWindow(QMainWindow):
 
         # Progress slider & Time label row
         progress_layout = QHBoxLayout()
-        self.time_slider = QSlider(Qt.Orientation.Horizontal)
+        self.time_slider = ClickableSlider(Qt.Orientation.Horizontal)
         self.time_slider.setRange(0, 1000)
         self.time_slider.sliderPressed.connect(self.on_slider_pressed)
         self.time_slider.sliderMoved.connect(self.on_slider_moved)
@@ -705,7 +724,7 @@ class MainWindow(QMainWindow):
         self.volume_btn.setToolTip("Mute/Unmute (M)")
         self.volume_btn.clicked.connect(self.toggle_mute)
 
-        self.volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self.volume_slider = ClickableSlider(Qt.Orientation.Horizontal)
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(80)
         self.volume_slider.setFixedWidth(70)
