@@ -773,16 +773,15 @@ class MainWindow(QMainWindow):
     def show_controls(self):
         self.control_bar_container.show()
         self.top_bar_container.show()
-        # Reset auto-hide timer if movie is playing and in Fullscreen mode
-        if self.is_playing and self.isFullScreen():
+        # Reset auto-hide timer in Fullscreen mode (regardless of play state)
+        if self.isFullScreen():
             self.hide_timer.start()
         else:
             self.hide_timer.stop()
 
     def hide_controls(self):
-        # Only hide controls when playing AND in Fullscreen mode
-        # This keeps the layout perfectly stable in windowed mode
-        if self.is_playing and self.isFullScreen():
+        # Always hide controls in Fullscreen mode after inactivity
+        if self.isFullScreen():
             self.control_bar_container.hide()
             self.top_bar_container.hide()
 
@@ -1058,9 +1057,11 @@ class MainWindow(QMainWindow):
         if is_fs:
             self.showNormal()
             self.show_toast("Window Mode", 1500)
+            self.show_controls()
         else:
             self.showFullScreen()
             self.show_toast("Fullscreen Mode (ESC to exit)", 2000)
+            self.show_controls()
 
     def keyPressEvent(self, event: QKeyEvent):
         key = event.key()
