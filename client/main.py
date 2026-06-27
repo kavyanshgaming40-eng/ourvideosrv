@@ -317,7 +317,7 @@ class MainWindow(QMainWindow):
         top_layout = QHBoxLayout(top_bar)
         top_layout.setContentsMargins(10, 5, 10, 5)
 
-        self.server_url_input = QLineEdit("http://localhost:5000")
+        self.server_url_input = QLineEdit("https://ourvideosrv.onrender.com")
         self.server_url_input.setPlaceholderText("Server URL")
         self.server_url_input.setFixedWidth(200)
 
