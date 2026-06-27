@@ -4,11 +4,12 @@ import time
 import socketio
 import logging
 from datetime import datetime
-from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt, QThread
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt, QThread, QPropertyAnimation, QEvent
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QLineEdit, QSlider, QFileDialog, QMessageBox,
-    QTextEdit, QSplitter, QFrame, QSizePolicy, QDialog
+    QTextEdit, QSplitter, QFrame, QSizePolicy, QDialog, QStackedWidget,
+    QGraphicsOpacityEffect
 )
 from PyQt6.QtGui import QFont, QColor, QPalette, QKeyEvent
 
@@ -116,6 +117,106 @@ QTextEdit {
     padding: 6px;
 }
 """
+
+class ToastNotification(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setStyleSheet("""
+            background-color: rgba(22, 23, 30, 0.95);
+            border: 1px solid #5f3dc4;
+            color: #ffffff;
+            border-radius: 16px;
+            padding: 8px 20px;
+            font-size: 12px;
+            font-weight: bold;
+        """)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.opacity_effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.opacity_effect)
+        self.hide()
+        
+    def show_toast(self, text, duration_ms=2500):
+        self.setText(text)
+        self.adjustSize()
+        
+        if self.parentWidget():
+            p_geom = self.parentWidget().geometry()
+            # Position at top center
+            x = (p_geom.width() - self.width()) // 2
+            y = 50
+            self.move(x, y)
+            
+        self.show()
+        self.raise_()
+        
+        self.anim = QPropertyAnimation(self.opacity_effect, b"opacity")
+        self.anim.setDuration(250)
+        self.anim.setStartValue(0.0)
+        self.anim.setEndValue(1.0)
+        self.anim.start()
+        
+        QTimer.singleShot(duration_ms, self.fade_out)
+        
+    def fade_out(self):
+        self.anim_out = QPropertyAnimation(self.opacity_effect, b"opacity")
+        self.anim_out.setDuration(400)
+        self.anim_out.setStartValue(1.0)
+        self.anim_out.setEndValue(0.0)
+        self.anim_out.finished.connect(self.hide)
+        self.anim_out.start()
+
+
+class EmptyStateWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background-color: #08090d;")
+        
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(16)
+        
+        icon_label = QLabel("🍿")
+        icon_label.setFont(QFont("Segoe UI", 56))
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(icon_label)
+        
+        title = QLabel("ourvideo")
+        title.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
+        title.setStyleSheet("color: #ffffff;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        
+        subtitle = QLabel("Synchronized cinema for two")
+        subtitle.setFont(QFont("Segoe UI", 12))
+        subtitle.setStyleSheet("color: #64748b;")
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(subtitle)
+        
+        self.open_btn = QPushButton("Select Video File")
+        self.open_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_btn.setStyleSheet("""
+            background-color: #5f3dc4;
+            color: white;
+            font-size: 13px;
+            font-weight: bold;
+            border-radius: 8px;
+            padding: 10px 24px;
+        """)
+        self.open_btn.clicked.connect(parent.open_file if parent else lambda: None)
+        
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.open_btn)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+        
+        self.info_label = QLabel("Or click the gear icon ⚙ at the bottom to connect to your partner")
+        self.info_label.setFont(QFont("Segoe UI", 11))
+        self.info_label.setStyleSheet("color: #475569;")
+        self.info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.info_label)
+
 
 class ConnectionDialog(QDialog):
     def __init__(self, parent, current_url, current_code):
@@ -356,6 +457,10 @@ class MainWindow(QMainWindow):
         self.current_filepath = ""
         self.current_filesize = 0
         
+        # Mute and Volume tracking
+        self.is_muted = False
+        self.previous_volume = 80
+        
         # Initialize VLC
         self.init_vlc()
 
@@ -373,6 +478,14 @@ class MainWindow(QMainWindow):
         self.update_timer = QTimer(self)
         self.update_timer.setInterval(200)
         self.update_timer.timeout.connect(self.update_player_state)
+
+        # Control Auto-Hiding Timer
+        self.hide_timer = QTimer(self)
+        self.hide_timer.setInterval(3000)
+        self.hide_timer.timeout.connect(self.hide_controls)
+        
+        # Enable Mouse tracking on main window
+        self.setMouseTracking(True)
 
     def init_vlc(self):
         if not vlc:
@@ -408,6 +521,9 @@ class MainWindow(QMainWindow):
             )
 
     def init_ui(self):
+        # Allow mouse tracking on the main window
+        self.setMouseTracking(True)
+        
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
@@ -422,28 +538,71 @@ class MainWindow(QMainWindow):
         self.join_room_btn = QPushButton("Join Room")
         self.join_room_btn.clicked.connect(self.join_room)
 
+        # ----------------- PREMIUM TOP BAR -----------------
+        self.top_bar_container = QWidget()
+        self.top_bar_container.setObjectName("topBarContainer")
+        self.top_bar_container.setStyleSheet("background-color: rgba(12, 13, 18, 0.85); border-bottom: 1px solid #1a1b26;")
+        self.top_bar_container.setFixedHeight(45)
+        
+        top_bar_layout = QHBoxLayout(self.top_bar_container)
+        top_bar_layout.setContentsMargins(15, 0, 15, 0)
+        
+        logo = QLabel("ourvideo 🍿")
+        logo.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        logo.setStyleSheet("color: #6c5ce7;")
+        
+        self.top_file_label = QLabel("No Video Loaded")
+        self.top_file_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Medium))
+        self.top_file_label.setStyleSheet("color: #94a3b8;")
+        self.top_file_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        self.top_status_label = QLabel("🔴 Disconnected")
+        self.top_status_label.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        self.top_status_label.setStyleSheet("color: #ef4444;")
+        self.top_status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
+        top_bar_layout.addWidget(logo)
+        top_bar_layout.addStretch()
+        top_bar_layout.addWidget(self.top_file_label)
+        top_bar_layout.addStretch()
+        top_bar_layout.addWidget(self.top_status_label)
+        
+        main_layout.addWidget(self.top_bar_container)
+
         # ----------------- CENTER BODY (PLAYER & CHAT SPLIT) -----------------
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setHandleWidth(1)
         splitter.setStyleSheet("QSplitter::handle { background-color: #1a1b26; }")
         
-        # Left side: Video player container
+        # Left side: QStackedWidget to manage Empty State & Video Player
+        self.stacked_widget = QStackedWidget()
+        
+        # Page 0: Empty state
+        self.empty_state = EmptyStateWidget(self)
+        self.stacked_widget.addWidget(self.empty_state)
+        
+        # Page 1: Video widget container
         self.video_container = QWidget()
         self.video_container.setStyleSheet("background-color: black;")
+        self.video_container.setMouseTracking(True)
         video_layout = QVBoxLayout(self.video_container)
         video_layout.setContentsMargins(0, 0, 0, 0)
         
         self.video_widget = QFrame()
         self.video_widget.setStyleSheet("background-color: black;")
+        self.video_widget.setMouseTracking(True)
+        self.video_widget.installEventFilter(self) # Capture mouse moves
         video_layout.addWidget(self.video_widget)
         
-        splitter.addWidget(self.video_container)
+        self.stacked_widget.addWidget(self.video_container)
+        
+        splitter.addWidget(self.stacked_widget)
         splitter.setStretchFactor(0, 4) # 80% width
 
         # Right side: Chat panel (300px width, hidden by default)
         self.chat_container = QWidget()
         self.chat_container.setFixedWidth(300)
-        self.chat_container.setStyleSheet("background-color: #0c0d12; border-left: 1px solid #1a1b26;")
+        self.chat_container.setStyleSheet("background-color: #08090d; border-left: 1px solid #1a1b26;")
         self.chat_container.hide() # Collapsed by default
         
         chat_layout = QVBoxLayout(self.chat_container)
@@ -464,7 +623,9 @@ class MainWindow(QMainWindow):
         chat_input_layout.addWidget(self.chat_input)
         chat_input_layout.addWidget(self.send_chat_btn)
         
-        chat_layout.addWidget(QLabel("<b>Room Chat</b>"))
+        chat_title = QLabel("<b>Room Chat</b>")
+        chat_title.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        chat_layout.addWidget(chat_title)
         chat_layout.addWidget(self.chat_display)
         chat_layout.addLayout(chat_input_layout)
         
@@ -474,15 +635,16 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(splitter, stretch=1)
 
         # ----------------- BOTTOM BAR (CONTROLS) -----------------
-        # Floating or overlay-like bar at the bottom
-        control_bar_container = QWidget()
-        control_bar_container.setStyleSheet("background-color: #000000; padding: 5px 10px 10px 10px;")
-        control_bar_layout = QVBoxLayout(control_bar_container)
+        self.control_bar_container = QWidget()
+        self.control_bar_container.setStyleSheet("background-color: #000000; padding: 5px 10px 10px 10px;")
+        self.control_bar_container.setMouseTracking(True)
+        control_bar_layout = QVBoxLayout(self.control_bar_container)
         control_bar_layout.setContentsMargins(0, 0, 0, 0)
         control_bar_layout.setSpacing(5)
 
         control_bar = QFrame()
         control_bar.setObjectName("controlBar")
+        control_bar.setMouseTracking(True)
         control_layout = QVBoxLayout(control_bar)
         control_layout.setContentsMargins(12, 8, 12, 8)
         control_layout.setSpacing(6)
@@ -507,7 +669,7 @@ class MainWindow(QMainWindow):
         
         self.open_file_btn = QPushButton("📁")
         self.open_file_btn.setObjectName("openFileBtn")
-        self.open_file_btn.setToolTip("Open Video File")
+        self.open_file_btn.setToolTip("Open Video File (Ctrl+O)")
         self.open_file_btn.clicked.connect(self.open_file)
         
         self.play_btn = QPushButton("▶")
@@ -527,6 +689,13 @@ class MainWindow(QMainWindow):
         self.latency_label = QLabel("")
         self.latency_label.setStyleSheet("color: #64748b; font-size: 11px; margin-right: 10px;")
 
+        # Smart volume control button + slider
+        self.volume_btn = QPushButton("🔊")
+        self.volume_btn.setObjectName("volumeBtn")
+        self.volume_btn.setStyleSheet("background-color: transparent; border: none; font-size: 14px; padding: 4px;")
+        self.volume_btn.setToolTip("Mute/Unmute (M)")
+        self.volume_btn.clicked.connect(self.toggle_mute)
+
         self.volume_slider = QSlider(Qt.Orientation.Horizontal)
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(80)
@@ -535,17 +704,18 @@ class MainWindow(QMainWindow):
         
         self.chat_toggle_btn = QPushButton("💬")
         self.chat_toggle_btn.setObjectName("chatToggleBtn")
-        self.chat_toggle_btn.setToolTip("Toggle Chat")
+        self.chat_toggle_btn.setToolTip("Toggle Chat (C)")
         self.chat_toggle_btn.clicked.connect(self.toggle_chat)
 
         self.settings_btn = QPushButton("⚙")
         self.settings_btn.setObjectName("settingsBtn")
-        self.settings_btn.setToolTip("Settings & Connection")
+        self.settings_btn.setToolTip("Settings & Connection (S)")
         self.settings_btn.clicked.connect(self.open_settings_dialog)
 
         self.fullscreen_btn = QPushButton("⛶")
         self.fullscreen_btn.setObjectName("fullscreenBtn")
         self.fullscreen_btn.setFixedWidth(30)
+        self.fullscreen_btn.setToolTip("Toggle Fullscreen (F)")
         self.fullscreen_btn.clicked.connect(self.toggle_fullscreen)
 
         buttons_layout.addWidget(self.open_file_btn)
@@ -553,7 +723,7 @@ class MainWindow(QMainWindow):
         buttons_layout.addWidget(self.file_label)
         buttons_layout.addWidget(self.latency_label)
         buttons_layout.addWidget(self.status_label)
-        buttons_layout.addWidget(QLabel("Vol:"))
+        buttons_layout.addWidget(self.volume_btn)
         buttons_layout.addWidget(self.volume_slider)
         buttons_layout.addWidget(self.chat_toggle_btn)
         buttons_layout.addWidget(self.settings_btn)
@@ -561,19 +731,85 @@ class MainWindow(QMainWindow):
         
         control_layout.addLayout(buttons_layout)
         control_bar_layout.addWidget(control_bar)
-        main_layout.addWidget(control_bar_container)
+        main_layout.addWidget(self.control_bar_container)
 
         # Set main widget
         central_widget = QWidget()
+        central_widget.setMouseTracking(True)
         central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
 
+        # ----------------- TOAST CONTAINER -----------------
+        self.toast = ToastNotification(self)
+
     def toggle_chat(self):
         self.chat_container.setVisible(not self.chat_container.isVisible())
+        self.show_toast("Chat Panel Opened" if self.chat_container.isVisible() else "Chat Panel Hidden", 1500)
 
     def open_settings_dialog(self):
         dialog = ConnectionDialog(self, self.server_url_input.text(), self.room_code_input.text())
         dialog.exec()
+
+    # ----------------- EVENT FILTER FOR MOUSE MOVE & AUTO-HIDE -----------------
+    def eventFilter(self, obj, event):
+        if obj == self.video_widget:
+            if event.type() in (QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress, QEvent.Type.HoverMove):
+                self.show_controls()
+        return super().eventFilter(obj, event)
+
+    def mouseMoveEvent(self, event):
+        self.show_controls()
+        super().mouseMoveEvent(event)
+
+    def show_controls(self):
+        self.control_bar_container.show()
+        self.top_bar_container.show()
+        # Reset auto-hide timer if movie is playing
+        if self.is_playing:
+            self.hide_timer.start()
+        else:
+            self.hide_timer.stop()
+
+    def hide_controls(self):
+        # Only hide when playing and not fullscreen overlays (unless desired)
+        if self.is_playing:
+            self.control_bar_container.hide()
+            self.top_bar_container.hide()
+
+    def show_toast(self, text, duration_ms=2500):
+        if hasattr(self, 'toast'):
+            self.toast.show_toast(text, duration_ms)
+
+    # ----------------- AUDIO & SMART VOLUME MUTE LOGIC -----------------
+    def toggle_mute(self):
+        if not self.media_player:
+            return
+            
+        if self.is_muted:
+            # Unmute
+            self.is_muted = False
+            self.media_player.audio_set_mute(False)
+            self.volume_slider.setValue(self.previous_volume)
+            self.update_volume_icon(self.previous_volume)
+            self.show_toast(f"Volume: {self.previous_volume}%", 1500)
+        else:
+            # Mute
+            self.is_muted = True
+            self.previous_volume = self.volume_slider.value()
+            self.media_player.audio_set_mute(True)
+            self.volume_slider.setValue(0)
+            self.update_volume_icon(0)
+            self.show_toast("Muted", 1500)
+
+    def update_volume_icon(self, val):
+        if val == 0 or self.is_muted:
+            self.volume_btn.setText("🔇")
+        elif val < 30:
+            self.volume_btn.setText("🔈")
+        elif val < 70:
+            self.volume_btn.setText("🔉")
+        else:
+            self.volume_btn.setText("🔊")
 
     def connect_signals(self):
         # Network signals
@@ -610,32 +846,44 @@ class MainWindow(QMainWindow):
     def on_network_connected(self):
         self.status_label.setText("Connected")
         self.status_label.setStyleSheet("color: #eab308; font-weight: bold; font-size: 11px;")
+        self.top_status_label.setText("🟢 Connected")
+        self.top_status_label.setStyleSheet("color: #22c55e;")
         self.connect_btn.setText("Disconnect")
         self.create_room_btn.setEnabled(True)
         self.join_room_btn.setEnabled(True)
         self.ping_timer.start(5000)
+        self.show_toast("Connected to server!", 2000)
 
     def on_network_disconnected(self):
         self.status_label.setText("Disconnected")
         self.status_label.setStyleSheet("color: #ef4444; font-weight: bold; font-size: 11px;")
+        self.top_status_label.setText("🔴 Disconnected")
+        self.top_status_label.setStyleSheet("color: #ef4444;")
         self.connect_btn.setText("Connect")
         self.create_room_btn.setEnabled(False)
         self.join_room_btn.setEnabled(False)
         self.ping_timer.stop()
         self.sync_enabled = False
+        self.show_toast("Disconnected from server", 2000)
 
     def on_room_created(self, code, status):
         self.status_label.setText(f"Room: {code}")
         self.status_label.setStyleSheet("color: #3b82f6; font-weight: bold; font-size: 11px;")
+        self.top_status_label.setText(f"🔵 Room: {code}")
+        self.top_status_label.setStyleSheet("color: #3b82f6;")
         self.room_code_input.setText(code)
         self.chat_display.append(f"<font color='#5f3dc4'>[System] Room created. Share code: {code}</font>")
+        self.show_toast(f"Room {code} created!", 2500)
 
     def on_room_joined(self, code, status):
         self.status_label.setText(f"Room: {code}")
         self.status_label.setStyleSheet("color: #22c55e; font-weight: bold; font-size: 11px;")
+        self.top_status_label.setText(f"🟢 Room: {code} (Connected)")
+        self.top_status_label.setStyleSheet("color: #22c55e;")
         self.room_code_input.setText(code)
         self.chat_display.append("<font color='#22c55e'>[System] Connected to partner.</font>")
         self.sync_enabled = True
+        self.show_toast("Partner connected!", 2500)
         
         # Share file metadata if already loaded
         self.send_file_metadata()
@@ -644,18 +892,24 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "Room Error", message)
         self.status_label.setText("Connected")
         self.status_label.setStyleSheet("color: #eab308; font-weight: bold; font-size: 11px;")
+        self.show_toast(f"Join error: {message}", 3000)
 
     def on_partner_disconnected(self, status):
         self.status_label.setText("Partner disconnected")
         self.status_label.setStyleSheet("color: #eab308; font-weight: bold; font-size: 11px;")
+        self.top_status_label.setText(f"🔵 Room: {self.network.room_code} (Waiting...)")
+        self.top_status_label.setStyleSheet("color: #eab308;")
         self.chat_display.append("<font color='#eab308'>[System] Partner disconnected.</font>")
         self.sync_enabled = False
+        self.show_toast("Partner disconnected", 2500)
 
     def on_file_status(self, matched, message):
         if matched:
-            self.chat_display.append("<font color='#2ecc71'>[System] File verification successful! Watching is synchronized.</font>")
+            self.chat_display.append("<font color='#22c55e'>[System] File verification successful! Watching is synchronized.</font>")
+            self.show_toast("File verification successful!", 2500)
         else:
             self.chat_display.append(f"<font color='#e74c3c'>[System] Verification Failed: {message}</font>")
+            self.show_toast("File mismatch detected!", 3000)
             QMessageBox.critical(self, "File Mismatch", message)
 
     def on_latency_updated(self, latency_ms):
@@ -703,10 +957,16 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(500, self.finish_media_loading)
 
     def finish_media_loading(self):
+        if not self.media_player:
+            return
+            
         self.media_player.pause()
         self.is_playing = False
         self.play_btn.setText("▶")
         self.play_btn.setEnabled(True)
+        
+        # Switch stacked widget to VLC player view (index 1)
+        self.stacked_widget.setCurrentIndex(1)
         
         # Get duration in seconds
         duration_ms = self.media_player.get_length()
@@ -718,23 +978,26 @@ class MainWindow(QMainWindow):
         if os.path.exists(srt_path):
             self.media_player.video_set_subtitle_file(srt_path)
             self.chat_display.append(f"<font color='#5865f2'>[System] Automatically loaded subtitles: {os.path.basename(srt_path)}</font>")
+            self.show_toast("Auto-loaded matching subtitles", 2000)
 
         # Extract resolution if possible
-        tracks = self.media_player.video_get_track_description()
-        # Fallback description
         res_text = ""
         width = self.media_player.video_get_width()
         height = self.media_player.video_get_height()
         if width > 0 and height > 0:
             res_text = f" ({width}x{height})"
 
-        self.file_label.setText(f"{os.path.basename(self.current_filepath)}{res_text}")
+        filename_only = os.path.basename(self.current_filepath)
+        self.file_label.setText(f"{filename_only}{res_text}")
+        self.top_file_label.setText(f"{filename_only}{res_text} • {self.format_time(self.duration)}")
         
         # Update progress tracking
         self.update_timer.start()
         
         # Send details to server
         self.send_file_metadata()
+        
+        self.show_toast(f"Loaded: {filename_only}", 2500)
 
     def send_file_metadata(self):
         if self.sync_enabled and self.current_filepath:
@@ -752,40 +1015,79 @@ class MainWindow(QMainWindow):
             self.pause_playback()
             if self.sync_enabled and not self.block_outgoing_sync:
                 self.network.send_sync("pause", self.media_player.get_time() / 1000.0)
+            self.show_toast("Paused", 1000)
         else:
             self.start_playback()
             if self.sync_enabled and not self.block_outgoing_sync:
                 self.network.send_sync("play", self.media_player.get_time() / 1000.0)
+            self.show_toast("Playing", 1000)
 
     def start_playback(self):
-        self.media_player.play()
-        self.is_playing = True
-        self.play_btn.setText("⏸")
+        if self.media_player:
+            self.media_player.play()
+            self.is_playing = True
+            self.play_btn.setText("⏸")
+            self.hide_timer.start() # Begin autohiding controls
 
     def pause_playback(self):
-        self.media_player.pause()
-        self.is_playing = False
-        self.play_btn.setText("▶")
+        if self.media_player:
+            self.media_player.pause()
+            self.is_playing = False
+            self.play_btn.setText("▶")
+            self.hide_timer.stop()
+            self.show_controls()
 
     def change_volume(self, value):
         if self.media_player:
             self.media_player.audio_set_volume(value)
+            self.is_muted = (value == 0)
+            self.update_volume_icon(value)
 
     def toggle_fullscreen(self):
-        # Simply toggle window state or VLC fullscreen mode
         is_fs = self.isFullScreen()
         if is_fs:
             self.showNormal()
+            self.show_toast("Window Mode", 1500)
         else:
             self.showFullScreen()
+            self.show_toast("Fullscreen Mode (ESC to exit)", 2000)
 
     def keyPressEvent(self, event: QKeyEvent):
+        key = event.key()
         # Space bar triggers play/pause
-        if event.key() == Qt.Key.Key_Space:
+        if key == Qt.Key.Key_Space:
             self.toggle_play()
-        # Escape exits fullscreen
-        elif event.key() == Qt.Key.Key_Escape and self.isFullScreen():
+        # Escape or F exits/enters fullscreen
+        elif key == Qt.Key.Key_F:
+            self.toggle_fullscreen()
+        elif key == Qt.Key.Key_Escape and self.isFullScreen():
             self.showNormal()
+            self.show_toast("Window Mode", 1500)
+        # M toggles mute
+        elif key == Qt.Key.Key_M:
+            self.toggle_mute()
+        # C toggles chat panel
+        elif key == Qt.Key.Key_C:
+            self.toggle_chat()
+        # S opens connection settings
+        elif key == Qt.Key.Key_S:
+            self.open_settings_dialog()
+        # Left arrow seeks back 5s
+        elif key == Qt.Key.Key_Left and self.media_player:
+            curr_ms = self.media_player.get_time()
+            target_ms = max(0, curr_ms - 5000)
+            self.media_player.set_time(target_ms)
+            if self.sync_enabled and not self.block_outgoing_sync:
+                self.network.send_sync("seek", target_ms / 1000.0)
+            self.show_toast("Seek -5s", 1000)
+        # Right arrow seeks forward 5s
+        elif key == Qt.Key.Key_Right and self.media_player:
+            curr_ms = self.media_player.get_time()
+            target_ms = min(int(self.duration * 1000), curr_ms + 5000)
+            self.media_player.set_time(target_ms)
+            if self.sync_enabled and not self.block_outgoing_sync:
+                self.network.send_sync("seek", target_ms / 1000.0)
+            self.show_toast("Seek +5s", 1000)
         else:
             super().keyPressEvent(event)
 
@@ -912,6 +1214,15 @@ class MainWindow(QMainWindow):
 
     def on_chat_received(self, sender, message):
         self.chat_display.append(f"<b>{sender}:</b> {message}")
+        if not self.chat_container.isVisible():
+            self.show_toast(f"New message from {sender}", 2000)
+
+    def resizeEvent(self, event):
+        if hasattr(self, 'toast') and self.toast.isVisible():
+            x = (self.width() - self.toast.width()) // 2
+            y = 50
+            self.toast.move(x, y)
+        super().resizeEvent(event)
 
     def closeEvent(self, event):
         # Shut down player and disconnect socket on exit
