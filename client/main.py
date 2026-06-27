@@ -224,6 +224,9 @@ class ClickableSlider(QSlider):
         
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
+            # Emit pressed signal immediately to freeze progress bar updates and prevent snap-back
+            self.sliderPressed.emit()
+            
             if self.orientation() == Qt.Orientation.Horizontal:
                 val = self.minimum() + ((self.maximum() - self.minimum()) * event.position().x()) / self.width()
             else:
