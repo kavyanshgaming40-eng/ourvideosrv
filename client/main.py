@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QTextEdit, QSplitter, QFrame, QSizePolicy, QDialog, QStackedWidget,
     QGraphicsOpacityEffect
 )
-from PyQt6.QtGui import QFont, QColor, QPalette, QKeyEvent
+from PyQt6.QtGui import QFont, QColor, QPalette, QKeyEvent, QShortcut, QKeySequence
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -486,6 +486,15 @@ class MainWindow(QMainWindow):
         
         # Enable Mouse tracking on main window
         self.setMouseTracking(True)
+
+        # Global Keyboard Shortcuts (Window scope to ensure they work when clicking sliders/buttons)
+        QShortcut(QKeySequence(Qt.Key.Key_Space), self, self.on_shortcut_space)
+        QShortcut(QKeySequence(Qt.Key.Key_F), self, self.on_shortcut_f)
+        QShortcut(QKeySequence(Qt.Key.Key_M), self, self.on_shortcut_m)
+        QShortcut(QKeySequence(Qt.Key.Key_C), self, self.on_shortcut_c)
+        QShortcut(QKeySequence(Qt.Key.Key_S), self, self.on_shortcut_s)
+        QShortcut(QKeySequence(Qt.Key.Key_Left), self, self.on_shortcut_left)
+        QShortcut(QKeySequence(Qt.Key.Key_Right), self, self.on_shortcut_right)
 
     def init_vlc(self):
         if not vlc:
@@ -1239,6 +1248,44 @@ class MainWindow(QMainWindow):
             y = 50
             self.toast.move(x, y)
         super().resizeEvent(event)
+
+    def on_shortcut_space(self):
+        if not self.chat_input.hasFocus():
+            self.toggle_play()
+
+    def on_shortcut_f(self):
+        if not self.chat_input.hasFocus():
+            self.toggle_fullscreen()
+
+    def on_shortcut_m(self):
+        if not self.chat_input.hasFocus():
+            self.toggle_mute()
+
+    def on_shortcut_c(self):
+        if not self.chat_input.hasFocus():
+            self.toggle_chat()
+
+    def on_shortcut_s(self):
+        if not self.chat_input.hasFocus():
+            self.open_settings_dialog()
+
+    def on_shortcut_left(self):
+        if not self.chat_input.hasFocus() and self.media_player:
+            curr_ms = self.media_player.get_time()
+            target_ms = max(0, curr_ms - 5000)
+            self.media_player.set_time(target_ms)
+            if self.sync_enabled and not self.block_outgoing_sync:
+                self.network.send_sync("seek", target_ms / 1000.0)
+            self.show_toast("Seek -5s", 1000)
+
+    def on_shortcut_right(self):
+        if not self.chat_input.hasFocus() and self.media_player:
+            curr_ms = self.media_player.get_time()
+            target_ms = min(int(self.duration * 1000), curr_ms + 5000)
+            self.media_player.set_time(target_ms)
+            if self.sync_enabled and not self.block_outgoing_sync:
+                self.network.send_sync("seek", target_ms / 1000.0)
+            self.show_toast("Seek +5s", 1000)
 
     def closeEvent(self, event):
         # Shut down player and disconnect socket on exit
