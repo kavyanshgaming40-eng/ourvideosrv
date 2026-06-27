@@ -1079,11 +1079,9 @@ class MainWindow(QMainWindow):
         if is_fs:
             self.showNormal()
             self.show_toast("Window Mode", 1500)
-            self.show_controls()
         else:
             self.showFullScreen()
             self.show_toast("Fullscreen Mode (ESC to exit)", 2000)
-            self.show_controls()
 
     def keyPressEvent(self, event: QKeyEvent):
         key = event.key()
@@ -1271,6 +1269,12 @@ class MainWindow(QMainWindow):
             y = 50
             self.toast.move(x, y)
         super().resizeEvent(event)
+
+    def changeEvent(self, event):
+        if event.type() == QEvent.Type.WindowStateChange:
+            # Short delay to allow window state to transition completely (so isFullScreen() is accurate)
+            QTimer.singleShot(200, self.show_controls)
+        super().changeEvent(event)
 
     def on_shortcut_space(self):
         if not self.chat_input.hasFocus():
