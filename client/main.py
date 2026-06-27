@@ -302,9 +302,23 @@ class MainWindow(QMainWindow):
         ]
         try:
             self.vlc_instance = vlc.Instance(args)
+            if not self.vlc_instance:
+                raise Exception("vlc.Instance returned None. The libvlc library could not be loaded.")
             self.media_player = self.vlc_instance.media_player_new()
         except Exception as e:
-            QMessageBox.critical(self, "VLC Init Error", f"Failed to initialize VLC: {e}")
+            self.vlc_instance = None
+            self.media_player = None
+            logging.error(f"VLC initialization failed: {e}")
+            QMessageBox.critical(
+                self, 
+                "VLC Load Error", 
+                "Could not load VLC. Please verify:\n\n"
+                "1. VLC Media Player is installed on this PC.\n"
+                "2. Your VLC architecture matches your Python installation:\n"
+                "   - If your Python is 64-bit (default), you MUST install 64-bit VLC.\n"
+                "   - If your Python is 32-bit, you MUST install 32-bit VLC.\n\n"
+                "Error details: " + str(e)
+            )
 
     def init_ui(self):
         main_layout = QVBoxLayout()
