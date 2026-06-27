@@ -8,7 +8,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, QTimer, Qt, QThread
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QLineEdit, QSlider, QFileDialog, QMessageBox,
-    QTextEdit, QSplitter, QFrame, QSizePolicy
+    QTextEdit, QSplitter, QFrame, QSizePolicy, QDialog
 )
 from PyQt6.QtGui import QFont, QColor, QPalette, QKeyEvent
 
@@ -25,88 +25,171 @@ except ImportError:
 # Custom styling sheets for a modern Dark Theme (Discord/Plex inspired)
 DARK_STYLE = """
 QMainWindow {
-    background-color: #0c0d12;
+    background-color: #000000;
 }
 QWidget {
-    color: #e2e8f0;
+    color: #f1f5f9;
     font-family: "Segoe UI", -apple-system, sans-serif;
     font-size: 13px;
 }
-QFrame#controlBar, QFrame#topBar {
-    background-color: #161720;
-    border: 1px solid #232533;
-    border-radius: 10px;
+QFrame#controlBar {
+    background-color: rgba(15, 17, 26, 0.85);
+    border: none;
+    border-radius: 8px;
+}
+QDialog {
+    background-color: #0f111a;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
 }
 QPushButton {
-    background-color: #6c5ce7;
+    background-color: #5f3dc4;
     color: white;
     border: none;
     border-radius: 6px;
-    padding: 6px 14px;
-    font-weight: bold;
+    padding: 6px 12px;
+    font-weight: 600;
 }
 QPushButton:hover {
-    background-color: #8070e7;
+    background-color: #7048e8;
 }
 QPushButton:pressed {
-    background-color: #5849c7;
+    background-color: #512fdb;
 }
 QPushButton:disabled {
-    background-color: #232533;
-    color: #5c607a;
+    background-color: #212529;
+    color: #495057;
 }
-QPushButton#playBtn, QPushButton#fullscreenBtn, QPushButton#openFileBtn {
-    background-color: #232533;
-    border: 1px solid #2f3248;
+QPushButton#playBtn, QPushButton#fullscreenBtn, QPushButton#openFileBtn, QPushButton#chatToggleBtn, QPushButton#settingsBtn {
+    background-color: transparent;
+    border: none;
+    color: #adb5bd;
+    font-size: 15px;
+    padding: 4px;
 }
-QPushButton#playBtn:hover, QPushButton#fullscreenBtn:hover, QPushButton#openFileBtn:hover {
-    background-color: #2d3047;
-    border-color: #6c5ce7;
+QPushButton#playBtn:hover, QPushButton#fullscreenBtn:hover, QPushButton#openFileBtn:hover, QPushButton#chatToggleBtn:hover, QPushButton#settingsBtn:hover {
+    color: #f1f5f9;
 }
 QLineEdit {
-    background-color: #1c1d28;
-    border: 1px solid #2d3047;
+    background-color: #1a1b26;
+    border: 1px solid #2e3047;
     border-radius: 6px;
-    padding: 5px 10px;
-    color: #f8fafc;
+    padding: 5px 8px;
+    color: #ffffff;
 }
 QLineEdit:focus {
-    border: 1px solid #6c5ce7;
-    background-color: #232533;
+    border: 1px solid #5f3dc4;
 }
 QSlider::groove:horizontal {
     border: none;
-    height: 6px;
-    background: #232533;
-    border-radius: 3px;
+    height: 4px;
+    background: #212529;
+    border-radius: 2px;
 }
 QSlider::handle:horizontal {
-    background: #6c5ce7;
+    background: #5f3dc4;
     border: none;
-    width: 14px;
-    height: 14px;
-    margin: -4px 0;
-    border-radius: 7px;
+    width: 10px;
+    height: 10px;
+    margin: -3px 0;
+    border-radius: 5px;
 }
 QSlider::handle:horizontal:hover {
-    background: #a29bfe;
+    background: #7048e8;
+    width: 12px;
+    height: 12px;
+    border-radius: 6px;
 }
 QSlider::add-page:horizontal {
-    background: #232533;
-    border-radius: 3px;
+    background: #212529;
+    border-radius: 2px;
 }
 QSlider::sub-page:horizontal {
-    background: #6c5ce7;
-    border-radius: 3px;
+    background: #5f3dc4;
+    border-radius: 2px;
 }
 QTextEdit {
-    background-color: #161720;
-    border: 1px solid #232533;
-    border-radius: 10px;
+    background-color: rgba(15, 17, 26, 0.9);
+    border: none;
+    border-radius: 8px;
     color: #e2e8f0;
     padding: 6px;
 }
 """
+
+class ConnectionDialog(QDialog):
+    def __init__(self, parent, current_url, current_code):
+        super().__init__(parent)
+        self.setWindowTitle("Settings & Connection")
+        self.setFixedWidth(360)
+        self.setStyleSheet(parent.styleSheet())
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
+        
+        layout.addWidget(QLabel("<b>Server URL</b>"))
+        self.url_input = QLineEdit(current_url)
+        self.url_input.setPlaceholderText("https://ourvideosrv.onrender.com")
+        layout.addWidget(self.url_input)
+        
+        self.connect_btn = QPushButton("Connect" if not parent.network.sio.connected else "Disconnect")
+        self.connect_btn.clicked.connect(self.handle_connection)
+        layout.addWidget(self.connect_btn)
+        
+        # Line separator
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        sep.setStyleSheet("background-color: #2e3047;")
+        layout.addWidget(sep)
+        
+        layout.addWidget(QLabel("<b>Room Settings</b>"))
+        self.create_btn = QPushButton("Create Room (Get Code)")
+        self.create_btn.setEnabled(parent.network.sio.connected)
+        self.create_btn.clicked.connect(self.handle_create)
+        layout.addWidget(self.create_btn)
+        
+        self.code_input = QLineEdit(current_code)
+        self.code_input.setPlaceholderText("Enter 6-digit Code")
+        self.code_input.setMaxLength(6)
+        
+        join_layout = QHBoxLayout()
+        join_layout.addWidget(self.code_input)
+        self.join_btn = QPushButton("Join Room")
+        self.join_btn.setEnabled(parent.network.sio.connected)
+        self.join_btn.clicked.connect(self.handle_join)
+        join_layout.addWidget(self.join_btn)
+        
+        layout.addLayout(join_layout)
+        
+        self.parent_win = parent
+        
+    def handle_connection(self):
+        self.parent_win.server_url_input.setText(self.url_input.text().strip())
+        self.parent_win.toggle_connection()
+        # Small delay to let connection state update, then refresh button states
+        QTimer.singleShot(800, self.update_states)
+        
+    def handle_create(self):
+        self.parent_win.network.create_room()
+        self.accept()
+        
+    def handle_join(self):
+        code = self.code_input.text().strip()
+        if len(code) == 6 and code.isdigit():
+            self.parent_win.room_code_input.setText(code)
+            self.parent_win.join_room()
+            self.accept()
+        else:
+            QMessageBox.warning(self, "Input Error", "Please enter a valid 6-digit room code.")
+            
+    def update_states(self):
+        connected = self.parent_win.network.sio.connected
+        self.connect_btn.setText("Disconnect" if connected else "Connect")
+        self.create_btn.setEnabled(connected)
+        self.join_btn.setEnabled(connected)
+
 
 class NetworkWorker(QObject):
     """
@@ -326,64 +409,30 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # ----------------- TOP BAR (CONNECTION / ROOMS) -----------------
-        top_bar = QFrame()
-        top_bar.setObjectName("topBar")
-        top_layout = QHBoxLayout(top_bar)
-        top_layout.setContentsMargins(10, 5, 10, 5)
-
+        # Background components (instantiated but kept out of layout to maintain state logic)
         self.server_url_input = QLineEdit("https://ourvideosrv.onrender.com")
-        self.server_url_input.setPlaceholderText("Server URL")
-        self.server_url_input.setFixedWidth(200)
-
+        self.room_code_input = QLineEdit()
         self.connect_btn = QPushButton("Connect")
         self.connect_btn.clicked.connect(self.toggle_connection)
-
         self.create_room_btn = QPushButton("Create Room")
-        self.create_room_btn.setEnabled(False)
         self.create_room_btn.clicked.connect(self.network.create_room)
-
-        self.room_code_input = QLineEdit()
-        self.room_code_input.setPlaceholderText("6-digit Code")
-        self.room_code_input.setFixedWidth(100)
-        self.room_code_input.setMaxLength(6)
-
         self.join_room_btn = QPushButton("Join Room")
-        self.join_room_btn.setEnabled(False)
         self.join_room_btn.clicked.connect(self.join_room)
-
-        self.status_label = QLabel("Status: Disconnected")
-        self.status_label.setStyleSheet("color: #ff3333; font-weight: bold;")
-        
-        self.latency_label = QLabel("Ping: -- ms")
-        self.latency_label.setStyleSheet("color: #72767d;")
-
-        top_layout.addWidget(QLabel("Server:"))
-        top_layout.addWidget(self.server_url_input)
-        top_layout.addWidget(self.connect_btn)
-        top_layout.addWidget(QFrame()) # spacer
-        top_layout.addWidget(self.create_room_btn)
-        top_layout.addWidget(self.room_code_input)
-        top_layout.addWidget(self.join_room_btn)
-        top_layout.addStretch()
-        top_layout.addWidget(self.latency_label)
-        top_layout.addWidget(self.status_label)
-
-        main_layout.addWidget(top_bar)
 
         # ----------------- CENTER BODY (PLAYER & CHAT SPLIT) -----------------
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(1)
+        splitter.setStyleSheet("QSplitter::handle { background-color: #1a1b26; }")
         
         # Left side: Video player container
         self.video_container = QWidget()
-        self.video_container.setStyleSheet("background-color: black; border-radius: 8px;")
+        self.video_container.setStyleSheet("background-color: black;")
         video_layout = QVBoxLayout(self.video_container)
         video_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Under windows, we pass the handle of the video widget to VLC
         self.video_widget = QFrame()
         self.video_widget.setStyleSheet("background-color: black;")
         video_layout.addWidget(self.video_widget)
@@ -391,15 +440,18 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.video_container)
         splitter.setStretchFactor(0, 4) # 80% width
 
-        # Right side: Chat panel (300px width limit)
-        chat_container = QWidget()
-        chat_container.setFixedWidth(300)
-        chat_layout = QVBoxLayout(chat_container)
-        chat_layout.setContentsMargins(0, 0, 0, 0)
+        # Right side: Chat panel (300px width, hidden by default)
+        self.chat_container = QWidget()
+        self.chat_container.setFixedWidth(300)
+        self.chat_container.setStyleSheet("background-color: #0c0d12; border-left: 1px solid #1a1b26;")
+        self.chat_container.hide() # Collapsed by default
+        
+        chat_layout = QVBoxLayout(self.chat_container)
+        chat_layout.setContentsMargins(10, 10, 10, 10)
         
         self.chat_display = QTextEdit()
         self.chat_display.setReadOnly(True)
-        self.chat_display.setPlaceholderText("Welcome to ourvideo! Connect to a server and join/create a room to chat.")
+        self.chat_display.setPlaceholderText("Welcome to ourvideo! Click the settings gear to connect and chat.")
         
         chat_input_layout = QHBoxLayout()
         self.chat_input = QLineEdit()
@@ -416,16 +468,24 @@ class MainWindow(QMainWindow):
         chat_layout.addWidget(self.chat_display)
         chat_layout.addLayout(chat_input_layout)
         
-        splitter.addWidget(chat_container)
+        splitter.addWidget(self.chat_container)
         splitter.setStretchFactor(1, 1) # 20% width
         
         main_layout.addWidget(splitter, stretch=1)
 
         # ----------------- BOTTOM BAR (CONTROLS) -----------------
+        # Floating or overlay-like bar at the bottom
+        control_bar_container = QWidget()
+        control_bar_container.setStyleSheet("background-color: #000000; padding: 5px 10px 10px 10px;")
+        control_bar_layout = QVBoxLayout(control_bar_container)
+        control_bar_layout.setContentsMargins(0, 0, 0, 0)
+        control_bar_layout.setSpacing(5)
+
         control_bar = QFrame()
         control_bar.setObjectName("controlBar")
         control_layout = QVBoxLayout(control_bar)
-        control_layout.setContentsMargins(10, 10, 10, 10)
+        control_layout.setContentsMargins(12, 8, 12, 8)
+        control_layout.setSpacing(6)
 
         # Progress slider & Time label row
         progress_layout = QHBoxLayout()
@@ -436,6 +496,7 @@ class MainWindow(QMainWindow):
         self.time_slider.sliderReleased.connect(self.on_slider_released)
         
         self.time_label = QLabel("00:00:00 / 00:00:00")
+        self.time_label.setStyleSheet("color: #94a3b8; font-size: 11px;")
         
         progress_layout.addWidget(self.time_slider)
         progress_layout.addWidget(self.time_label)
@@ -444,46 +505,75 @@ class MainWindow(QMainWindow):
         # Controls buttons row
         buttons_layout = QHBoxLayout()
         
-        self.open_file_btn = QPushButton("Open File")
+        self.open_file_btn = QPushButton("📁")
         self.open_file_btn.setObjectName("openFileBtn")
+        self.open_file_btn.setToolTip("Open Video File")
         self.open_file_btn.clicked.connect(self.open_file)
         
         self.play_btn = QPushButton("▶")
         self.play_btn.setObjectName("playBtn")
-        self.play_btn.setFixedWidth(50)
-        self.play_btn.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        self.play_btn.setFixedWidth(30)
+        self.play_btn.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         self.play_btn.clicked.connect(self.toggle_play)
         self.play_btn.setEnabled(False)
 
         self.file_label = QLabel("No File Selected")
-        self.file_label.setStyleSheet("color: #b5bac1;")
+        self.file_label.setStyleSheet("color: #64748b; font-size: 12px;")
         self.file_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         
+        self.status_label = QLabel("Disconnected")
+        self.status_label.setStyleSheet("color: #ef4444; font-weight: bold; font-size: 11px; margin-right: 10px;")
+        
+        self.latency_label = QLabel("")
+        self.latency_label.setStyleSheet("color: #64748b; font-size: 11px; margin-right: 10px;")
+
         self.volume_slider = QSlider(Qt.Orientation.Horizontal)
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(80)
-        self.volume_slider.setFixedWidth(100)
+        self.volume_slider.setFixedWidth(70)
         self.volume_slider.valueChanged.connect(self.change_volume)
         
+        self.chat_toggle_btn = QPushButton("💬")
+        self.chat_toggle_btn.setObjectName("chatToggleBtn")
+        self.chat_toggle_btn.setToolTip("Toggle Chat")
+        self.chat_toggle_btn.clicked.connect(self.toggle_chat)
+
+        self.settings_btn = QPushButton("⚙")
+        self.settings_btn.setObjectName("settingsBtn")
+        self.settings_btn.setToolTip("Settings & Connection")
+        self.settings_btn.clicked.connect(self.open_settings_dialog)
+
         self.fullscreen_btn = QPushButton("⛶")
         self.fullscreen_btn.setObjectName("fullscreenBtn")
-        self.fullscreen_btn.setFixedWidth(40)
+        self.fullscreen_btn.setFixedWidth(30)
         self.fullscreen_btn.clicked.connect(self.toggle_fullscreen)
 
         buttons_layout.addWidget(self.open_file_btn)
         buttons_layout.addWidget(self.play_btn)
         buttons_layout.addWidget(self.file_label)
+        buttons_layout.addWidget(self.latency_label)
+        buttons_layout.addWidget(self.status_label)
         buttons_layout.addWidget(QLabel("Vol:"))
         buttons_layout.addWidget(self.volume_slider)
+        buttons_layout.addWidget(self.chat_toggle_btn)
+        buttons_layout.addWidget(self.settings_btn)
         buttons_layout.addWidget(self.fullscreen_btn)
         
         control_layout.addLayout(buttons_layout)
-        main_layout.addWidget(control_bar)
+        control_bar_layout.addWidget(control_bar)
+        main_layout.addWidget(control_bar_container)
 
         # Set main widget
         central_widget = QWidget()
         central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
+
+    def toggle_chat(self):
+        self.chat_container.setVisible(not self.chat_container.isVisible())
+
+    def open_settings_dialog(self):
+        dialog = ConnectionDialog(self, self.server_url_input.text(), self.room_code_input.text())
+        dialog.exec()
 
     def connect_signals(self):
         # Network signals
@@ -518,16 +608,16 @@ class MainWindow(QMainWindow):
             self.network.disconnect_server()
 
     def on_network_connected(self):
-        self.status_label.setText("Connected (No Room)")
-        self.status_label.setStyleSheet("color: #f1c40f; font-weight: bold;")
+        self.status_label.setText("Connected")
+        self.status_label.setStyleSheet("color: #eab308; font-weight: bold; font-size: 11px;")
         self.connect_btn.setText("Disconnect")
         self.create_room_btn.setEnabled(True)
         self.join_room_btn.setEnabled(True)
         self.ping_timer.start(5000)
 
     def on_network_disconnected(self):
-        self.status_label.setText("Status: Disconnected")
-        self.status_label.setStyleSheet("color: #ff3333; font-weight: bold;")
+        self.status_label.setText("Disconnected")
+        self.status_label.setStyleSheet("color: #ef4444; font-weight: bold; font-size: 11px;")
         self.connect_btn.setText("Connect")
         self.create_room_btn.setEnabled(False)
         self.join_room_btn.setEnabled(False)
@@ -535,16 +625,16 @@ class MainWindow(QMainWindow):
         self.sync_enabled = False
 
     def on_room_created(self, code, status):
-        self.status_label.setText(f"Room: {code} | {status}")
-        self.status_label.setStyleSheet("color: #3498db; font-weight: bold;")
+        self.status_label.setText(f"Room: {code}")
+        self.status_label.setStyleSheet("color: #3b82f6; font-weight: bold; font-size: 11px;")
         self.room_code_input.setText(code)
-        self.chat_display.append("<font color='#5865f2'>[System] Room created. Share the code with your partner!</font>")
+        self.chat_display.append(f"<font color='#5f3dc4'>[System] Room created. Share code: {code}</font>")
 
     def on_room_joined(self, code, status):
-        self.status_label.setText(f"Room: {code} | {status}")
-        self.status_label.setStyleSheet("color: #2ecc71; font-weight: bold;")
+        self.status_label.setText(f"Room: {code}")
+        self.status_label.setStyleSheet("color: #22c55e; font-weight: bold; font-size: 11px;")
         self.room_code_input.setText(code)
-        self.chat_display.append("<font color='#2ecc71'>[System] Connected to partner.</font>")
+        self.chat_display.append("<font color='#22c55e'>[System] Connected to partner.</font>")
         self.sync_enabled = True
         
         # Share file metadata if already loaded
@@ -552,13 +642,13 @@ class MainWindow(QMainWindow):
 
     def on_join_error(self, message):
         QMessageBox.warning(self, "Room Error", message)
-        self.status_label.setText("Connected (No Room)")
-        self.status_label.setStyleSheet("color: #f1c40f; font-weight: bold;")
+        self.status_label.setText("Connected")
+        self.status_label.setStyleSheet("color: #eab308; font-weight: bold; font-size: 11px;")
 
     def on_partner_disconnected(self, status):
-        self.status_label.setText(f"Room: {self.network.room_code} | {status}")
-        self.status_label.setStyleSheet("color: #f1c40f; font-weight: bold;")
-        self.chat_display.append("<font color='#f1c40f'>[System] Partner disconnected.</font>")
+        self.status_label.setText("Partner disconnected")
+        self.status_label.setStyleSheet("color: #eab308; font-weight: bold; font-size: 11px;")
+        self.chat_display.append("<font color='#eab308'>[System] Partner disconnected.</font>")
         self.sync_enabled = False
 
     def on_file_status(self, matched, message):
