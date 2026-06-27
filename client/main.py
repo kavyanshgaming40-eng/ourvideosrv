@@ -224,20 +224,38 @@ class ClickableSlider(QSlider):
         
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            # Emit pressed signal immediately to freeze progress bar updates and prevent snap-back
             self.sliderPressed.emit()
-            
-            if self.orientation() == Qt.Orientation.Horizontal:
-                val = self.minimum() + ((self.maximum() - self.minimum()) * event.position().x()) / self.width()
-            else:
-                val = self.minimum() + ((self.maximum() - self.minimum()) * (self.height() - event.position().y())) / self.height()
-            
-            val = max(self.minimum(), min(self.maximum(), int(val)))
-            self.setValue(val)
-            self.sliderMoved.emit(val)
-            super().mousePressEvent(event)
+            self.update_value_from_pos(event.position())
+            # Emit sliderReleased immediately to perform the seek on single click
+            self.sliderReleased.emit()
+            event.accept()
         else:
             super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.MouseButton.LeftButton:
+            # Update position while dragging
+            self.update_value_from_pos(event.position())
+            event.accept()
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.sliderReleased.emit()
+            event.accept()
+        else:
+            super().mouseReleaseEvent(event)
+
+    def update_value_from_pos(self, pos):
+        if self.orientation() == Qt.Orientation.Horizontal:
+            val = self.minimum() + ((self.maximum() - self.minimum()) * pos.x()) / self.width()
+        else:
+            val = self.minimum() + ((self.maximum() - self.minimum()) * (self.height() - pos.y())) / self.height()
+        
+        val = max(self.minimum(), min(self.maximum(), int(val)))
+        self.setValue(val)
+        self.sliderMoved.emit(val)
 
 
 class ConnectionDialog(QDialog):
