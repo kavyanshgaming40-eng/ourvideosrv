@@ -610,11 +610,35 @@ class MainWindow(QMainWindow):
         self.top_status_label.setStyleSheet("color: #ef4444;")
         self.top_status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
+        self.copy_room_btn = QPushButton("📋 Copy Code")
+        self.copy_room_btn.setObjectName("copyRoomBtn")
+        self.copy_room_btn.setStyleSheet("""
+            QPushButton#copyRoomBtn {
+                background-color: #232533;
+                border: 1px solid #2f3248;
+                border-radius: 4px;
+                color: #94a3b8;
+                font-size: 11px;
+                padding: 3px 8px;
+                font-weight: normal;
+                margin-left: 10px;
+            }
+            QPushButton#copyRoomBtn:hover {
+                background-color: #6c5ce7;
+                color: white;
+                border-color: #6c5ce7;
+            }
+        """)
+        self.copy_room_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.copy_room_btn.clicked.connect(self.copy_room_code_to_clipboard)
+        self.copy_room_btn.hide()
+        
         top_bar_layout.addWidget(logo)
         top_bar_layout.addStretch()
         top_bar_layout.addWidget(self.top_file_label)
         top_bar_layout.addStretch()
         top_bar_layout.addWidget(self.top_status_label)
+        top_bar_layout.addWidget(self.copy_room_btn)
         
         main_layout.addWidget(self.top_bar_container)
 
@@ -915,6 +939,7 @@ class MainWindow(QMainWindow):
         self.join_room_btn.setEnabled(False)
         self.ping_timer.stop()
         self.sync_enabled = False
+        self.copy_room_btn.hide()
         self.show_toast("Disconnected from server", 2000)
 
     def on_room_created(self, code, status):
@@ -924,6 +949,7 @@ class MainWindow(QMainWindow):
         self.top_status_label.setStyleSheet("color: #3b82f6;")
         self.room_code_input.setText(code)
         self.chat_display.append(f"<font color='#5f3dc4'>[System] Room created. Share code: {code}</font>")
+        self.copy_room_btn.show()
         self.show_toast(f"Room {code} created!", 2500)
 
     def on_room_joined(self, code, status):
@@ -934,6 +960,7 @@ class MainWindow(QMainWindow):
         self.room_code_input.setText(code)
         self.chat_display.append("<font color='#22c55e'>[System] Connected to partner.</font>")
         self.sync_enabled = True
+        self.copy_room_btn.show()
         self.show_toast("Partner connected!", 2500)
         
         # Share file metadata if already loaded
@@ -1364,6 +1391,14 @@ class MainWindow(QMainWindow):
             if self.sync_enabled and not self.block_outgoing_sync:
                 self.network.send_sync("seek", target_ms / 1000.0)
             self.show_toast("Seek +5s", 1000)
+
+    def copy_room_code_to_clipboard(self):
+        code = self.network.room_code
+        if code:
+            QApplication.clipboard().setText(code)
+            self.show_toast(f"Copied Room Code: {code}", 2000)
+        else:
+            self.show_toast("No active room code to copy", 2000)
 
     def closeEvent(self, event):
         # Shut down player and disconnect socket on exit
