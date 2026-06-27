@@ -4,7 +4,21 @@ Welcome! This guide outlines the system architecture, codebases, file structures
 
 ---
 
-## 1. Project Directory Structure
+## 0. TL;DR for AI Agents
+
+* **Goal**: A 2-person real-time synchronized video player. Video files are loaded locally (no file streaming); only playback state signals (play, pause, seek, volume, chat) are synchronized via a lightweight WebSocket server.
+* **Stack**: PyQt6 + python-vlc + python-socketio (Desktop Client) | Flask-SocketIO (Coordination Backend).
+* **Server Deployment**: Deployed on Render free tier at `https://ourvideosrv.onrender.com`. Host spins down after 15 minutes of inactivity (cold start takes ~50s).
+* **Key Commands**:
+  * Run Client: `python client/main.py`
+  * Run Server: `cd server && python app.py`
+  * Build Client to EXE: `build_client.bat` (via PyInstaller)
+  * Push to Github: `push_to_github.bat` (prompts browser-login credential bypass)
+* **Core Rule**: **Do NOT touch VLC Instance flags** without matching architectures. **Do NOT block the PyQt UI thread** with blocking sleeps.
+
+---
+
+## 1. Project Directory Structure & Code Map
 
 ```text
 ourvideo/
@@ -18,11 +32,48 @@ ourvideo/
 └── AGENTS.md               # This system architecture & developer guide (onboarding)
 ```
 
+### Where to Change X (Code Map)
+
+| If you want to... | Look at File:Class | Details / Methods |
+|---|---|---|
+| Edit custom timeline click/drag | `client/main.py:ClickableSlider` | Overridden `mousePressEvent`/`mouseMoveEvent`/`mouseReleaseEvent` |
+| Change seek synchronization math | `client/main.py:MainWindow` | `on_slider_released()`, `on_sync_received()` |
+| Handle new room socket messages | `client/main.py:NetworkWorker` | `setup_handlers()`, connect signals in `MainWindow:connect_signals()` |
+| Edit server-side room management | `server/app.py` | SocketIO events (`join_room`, `sync_event`, `report_playback_state`) |
+| Customize app styling (Dark QSS) | `client/main.py` | `DARK_STYLE` stylesheet string at the top of the file |
+| Register a new hotkey shortcut | `client/main.py:MainWindow` | `__init__()` (QShortcut registrations) and bottom handlers |
+
 ---
 
-## 2. Server Architecture (`/server/app.py`)
+## 2. Sync Data Flow Diagram
 
-The server is a lightweight **Flask-SocketIO** (WebSockets) coordinator. It does not store user accounts or database entries. Instead, it manages temporary, in-memory sync rooms.
+The following Mermaid diagram visualizes the synchronization cycle when **User A performs a seek**:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor UserA as User A (Seeker)
+    participant ClientA as Client A (PyQt6)
+    participant Server as Server (Flask-SocketIO)
+    participant ClientB as Client B (PyQt6)
+    actor UserB as User B (Partner)
+
+    UserA->>ClientA: Clicks Timeline (e.g. 120s)
+    Note over ClientA: on_slider_pressed()<br/>freezes slider update timer
+    ClientA->>ClientA: Set time locally: 120s
+    ClientA->>Server: emit("sync_event", {event: "seek", time: 120.0, timestamp: 1782553394.84})
+    Server->>ClientB: broadcast("sync_receive", {event: "seek", time: 120.0, timestamp: 1782553394.84})
+    Note over ClientB: on_sync_received()<br/>Calculate Latency Offset:<br/>(Current Time - 1782553394.84) + (RTT / 2)
+    ClientB->>ClientB: Seek to (120.0s + Latency Offset)
+    Note over ClientB: Pause playback & buffer for 1.0s
+    ClientB->>UserB: Resume synchronized playback!
+```
+
+---
+
+## 3. Server Architecture (`/server/app.py`)
+
+The server is a lightweight WebSockets coordinator. It does not store user accounts or database entries. Instead, it manages temporary, in-memory sync rooms.
 
 ### Key Data Structures (In-Memory)
 * `ROOMS`: A dictionary mapping room codes (e.g. `12345`) to room data:
@@ -48,7 +99,7 @@ The server is a lightweight **Flask-SocketIO** (WebSockets) coordinator. It does
 
 ---
 
-## 3. Client Architecture (`/client/main.py`)
+## 4. Client Architecture (`/client/main.py`)
 
 The client is a premium desktop video player built with **PyQt6** and **python-vlc** bindings. It implements a beautiful, dark-themed, glassmorphic layout.
 
@@ -79,7 +130,7 @@ The client is a premium desktop video player built with **PyQt6** and **python-v
 
 ---
 
-## 4. Latency & Clock Synchronization Protocol
+## 5. Latency & Clock Synchronization Protocol
 
 To compensate for network latency during real-time seeking:
 * Every 5 seconds, the client pings the server to calculate **Round-Trip Time (RTT)**.
@@ -93,13 +144,34 @@ To compensate for network latency during real-time seeking:
 
 ---
 
-## 5. Deployment & System Quirks
+## 6. Config & Constants
 
-### VLC Binary Architecture Quirks
-* **Architecture Mismatch**: On Windows, the client requires the VLC desktop application to be installed. Crucially, the **architecture of Python and VLC MUST match**. If you run 64-bit Python, you must install 64-bit VLC. If you run 32-bit Python, you must install 32-bit VLC. Otherwise, `vlc.Instance()` will fail to load with `OSError`.
-* **Hardware Acceleration**: Windows VLC initialization fails on certain older graphics drivers if hardware decoding flags (like `--d3d11-hw-dec=1`) are forced. The code uses `--avcodec-hw=any` for broad driver compatibility.
-* **C-level Access Violations**: Calling native methods like `.get_time()` on the player while it is in an uninitialized state or actively seeking (asynchronous seek) can cause C-level Access Violations (Segmentation Faults). We guard the update loop by checking `self.media_player.get_media()`, delaying update timers by 500ms during seeks, and wrapping the loop in `try...except OSError:` blocks.
+Configurations are located directly at the top of the codebase to allow easy customization:
 
-### Server Deployment
-* The backend is deployed on Render at: `https://ourvideosrv.onrender.com`.
-* **Render Free Tier Spin Down**: The container goes to sleep after 15 minutes of inactivity. When a client first connects, it might experience a timeout due to Render's cold start (50s wakeup time). We set the client's `wait_timeout=30` to tolerate cold starts. Visiting the Render URL via a browser wakes up the instance instantly.
+| Constant / Config | Default Value | Located In | Purpose |
+|---|---|---|---|
+| `SERVER_URL` | `https://ourvideosrv.onrender.com` | `client/main.py` (settings modal default) | SocketIO Server address |
+| `wait_timeout` | `30` | `client/main.py` (`connect_server()`) | Maximum seconds client waits for server cold start |
+| `PING_INTERVAL` | `5` seconds | `client/main.py` (`__init__()` ping timer) | How often ping packets are sent to calculate latency |
+| `hide_timer` interval | `3000` ms (3 seconds) | `client/main.py` (`__init__()` hide timer) | Inactivity threshold before controls hide in fullscreen |
+| `update_timer` interval | `200` ms | `client/main.py` (`__init__()` update timer) | Refresh rate of player timeline slider |
+
+---
+
+## 7. Known Issues & Limitations
+
+1. **VLC 3.0.20 + Win11 Fullscreen Flashing**: On certain Windows 11 graphics configurations, entering/exiting fullscreen causes the Windows taskbar to flash white for a split second. **By Design**: This is a native VLC/Qt handle swap delay issue, not an application-level bug.
+2. **MKV Chapter Seeking**: Scrubbing directly onto chapter markers causes a ~1-2s desync while the decoder reads metadata. **Mitigation**: Standard latency compensation and the 1s pause buffer automatically stabilize this.
+3. **Render Free Tier Cold Start**: If the app has not been used for 15 minutes, connection will hang for ~50s. **By Design**: Render free tier puts containers to sleep. The client timeout is configured to `30s` to tolerate cold starts. Open the Render URL in a browser to wake it up instantly.
+
+---
+
+## 8. Before Commit Verification Checklist
+
+Before pushing any PR or commits, verify the following checklist:
+
+- [ ] **Dual Client Sync**: Open two client windows, connect to a room, and click seek/play. Both clients must stay synced within `500ms`.
+- [ ] **File Info Warning**: Connect to a room, load a file on Client A, and a different file (or size/duration) on Client B. Verify that the file verification status dialog pops up warning both users.
+- [ ] **Fullscreen Exit Controls**: Enter Fullscreen mode, wait 3 seconds for controls to hide. Exit Fullscreen (ESC or F) and verify that top/bottom control bars are fully visible again and layout has not collapsed.
+- [ ] **Keyboard Shortcuts Focus Bypass**: Focus on the volume slider or folders button, click `Space` to pause, `M` to mute, and verify that keyboard shortcuts work. Click inside the chat input box, type characters (including spaces), and verify that shortcuts are ignored.
+- [ ] **Standalone Compilation**: Execute `build_client.bat` to verify that PyInstaller packages the executable cleanly without syntax or missing import errors.
