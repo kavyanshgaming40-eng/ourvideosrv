@@ -36,14 +36,19 @@ def handle_ping(data):
     emit('pong_client', {"client_time": data.get("client_time")})
 
 @socketio.on('create_room')
-def handle_create_room():
+def handle_create_room(data=None):
     sid = request.sid
     # Clean up user's old room if any
     handle_disconnect()
     
+    username = "Host"
+    if data and isinstance(data, dict):
+        username = data.get("username", "Host")
+        
     room_code = generate_room_code()
     ROOMS[room_code] = {
         "users": [sid],
+        "usernames": {sid: username},
         "files": {}
     }
     SID_TO_ROOM[sid] = room_code
@@ -57,7 +62,8 @@ def handle_create_room():
 @socketio.on('join_room')
 def handle_join_room(data):
     sid = request.sid
-    room_code = data.get("room_code")
+    room_code = data.get("room_code") if data else None
+    username = data.get("username", "Partner") if data else "Partner"
     
     if not room_code:
         emit('join_error', {"message": "Invalid room code."})
@@ -76,17 +82,30 @@ def handle_join_room(data):
     handle_disconnect()
     
     room["users"].append(sid)
+    if "usernames" not in room:
+        room["usernames"] = {}
+    room["usernames"][sid] = username
     SID_TO_ROOM[sid] = room_code
     join_room(room_code)
     
-    # Notify both room members
+    host_sid = room["users"][0]
+    host_username = room["usernames"].get(host_sid, "Host")
+    
+    # Notify host that partner connected (sharing partner name)
     emit('room_joined', {
         "room_code": room_code,
-        "status": "Partner Connected"
-    }, to=room_code)
+        "status": "Partner Connected",
+        "partner_name": username
+    }, to=host_sid)
+    
+    # Notify partner that they connected (sharing host name)
+    emit('room_joined', {
+        "room_code": room_code,
+        "status": "Partner Connected",
+        "partner_name": host_username
+    }, to=sid)
     
     # Request the host (first user) to report their current playback state
-    host_sid = room["users"][0]
     emit('request_playback_state', {}, to=host_sid)
 
 @socketio.on('file_info')
@@ -162,6 +181,8 @@ def handle_disconnect():
     room = ROOMS[room_code]
     if sid in room["users"]:
         room["users"].remove(sid)
+    if "usernames" in room:
+        room["usernames"].pop(sid, None)
     room["files"].pop(sid, None)
     
     # Leave room
