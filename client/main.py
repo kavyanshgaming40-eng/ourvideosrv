@@ -25,61 +25,63 @@ except ImportError:
 # Custom styling sheets for a modern Dark Theme (Discord/Plex inspired)
 DARK_STYLE = """
 QMainWindow {
-    background-color: #1e1f22;
+    background-color: #0c0d12;
 }
 QWidget {
-    color: #dbdee1;
-    font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+    color: #e2e8f0;
+    font-family: "Segoe UI", -apple-system, sans-serif;
     font-size: 13px;
 }
 QFrame#controlBar, QFrame#topBar {
-    background-color: #2b2d31;
-    border-radius: 8px;
+    background-color: #161720;
+    border: 1px solid #232533;
+    border-radius: 10px;
 }
 QPushButton {
-    background-color: #5865f2;
+    background-color: #6c5ce7;
     color: white;
     border: none;
-    border-radius: 4px;
-    padding: 6px 12px;
+    border-radius: 6px;
+    padding: 6px 14px;
     font-weight: bold;
 }
 QPushButton:hover {
-    background-color: #4752c4;
+    background-color: #8070e7;
 }
 QPushButton:pressed {
-    background-color: #3c45a5;
+    background-color: #5849c7;
 }
 QPushButton:disabled {
-    background-color: #4f545c;
-    color: #72767d;
+    background-color: #232533;
+    color: #5c607a;
 }
-QPushButton#playBtn, QPushButton#fullscreenBtn {
-    background-color: #313338;
-    border: 1px solid #4e5058;
+QPushButton#playBtn, QPushButton#fullscreenBtn, QPushButton#openFileBtn {
+    background-color: #232533;
+    border: 1px solid #2f3248;
 }
-QPushButton#playBtn:hover, QPushButton#fullscreenBtn:hover {
-    background-color: #35373c;
+QPushButton#playBtn:hover, QPushButton#fullscreenBtn:hover, QPushButton#openFileBtn:hover {
+    background-color: #2d3047;
+    border-color: #6c5ce7;
 }
 QLineEdit {
-    background-color: #1e1f22;
-    border: 1px solid #3f4147;
-    border-radius: 4px;
-    padding: 4px 8px;
-    color: #f2f3f5;
+    background-color: #1c1d28;
+    border: 1px solid #2d3047;
+    border-radius: 6px;
+    padding: 5px 10px;
+    color: #f8fafc;
 }
 QLineEdit:focus {
-    border: 1px solid #5865f2;
+    border: 1px solid #6c5ce7;
+    background-color: #232533;
 }
 QSlider::groove:horizontal {
-    border: 1px solid #2b2d31;
+    border: none;
     height: 6px;
-    background: #4e5058;
-    margin: 2px 0;
+    background: #232533;
     border-radius: 3px;
 }
 QSlider::handle:horizontal {
-    background: #5865f2;
+    background: #6c5ce7;
     border: none;
     width: 14px;
     height: 14px;
@@ -87,19 +89,22 @@ QSlider::handle:horizontal {
     border-radius: 7px;
 }
 QSlider::handle:horizontal:hover {
-    background: #7289da;
+    background: #a29bfe;
 }
 QSlider::add-page:horizontal {
-    background: #4e5058;
+    background: #232533;
+    border-radius: 3px;
 }
 QSlider::sub-page:horizontal {
-    background: #5865f2;
+    background: #6c5ce7;
+    border-radius: 3px;
 }
 QTextEdit {
-    background-color: #2b2d31;
-    border: 1px solid #3f4147;
-    border-radius: 6px;
-    color: #dbdee1;
+    background-color: #161720;
+    border: 1px solid #232533;
+    border-radius: 10px;
+    color: #e2e8f0;
+    padding: 6px;
 }
 """
 
@@ -440,6 +445,7 @@ class MainWindow(QMainWindow):
         buttons_layout = QHBoxLayout()
         
         self.open_file_btn = QPushButton("Open File")
+        self.open_file_btn.setObjectName("openFileBtn")
         self.open_file_btn.clicked.connect(self.open_file)
         
         self.play_btn = QPushButton("▶")
