@@ -1118,22 +1118,33 @@ class MainWindow(QMainWindow):
         self.ignore_slider_update = False
 
     def update_player_state(self):
-        if not self.media_player or self.ignore_slider_update:
-            return
+        try:
+            if not self.media_player or self.ignore_slider_update:
+                return
+                
+            # Accessing native player functions before media is loaded can cause Access Violations
+            media = self.media_player.get_media()
+            if not media:
+                return
+                
+            curr_time_ms = self.media_player.get_time()
+            if curr_time_ms < 0:
+                curr_time_ms = 0
+                
+            curr_sec = curr_time_ms / 1000.0
             
-        curr_time_ms = self.media_player.get_time()
-        if curr_time_ms < 0:
-            curr_time_ms = 0
+            # Update text labels
+            self.time_label.setText(f"{self.format_time(curr_sec)} / {self.format_time(self.duration)}")
             
-        curr_sec = curr_time_ms / 1000.0
-        
-        # Update text labels
-        self.time_label.setText(f"{self.format_time(curr_sec)} / {self.format_time(self.duration)}")
-        
-        # Update progress slider position
-        if self.duration > 0:
-            slider_pos = int((curr_sec / self.duration) * 1000)
-            self.time_slider.setValue(slider_pos)
+            # Update progress slider position
+            if self.duration > 0:
+                slider_pos = int((curr_sec / self.duration) * 1000)
+                self.time_slider.setValue(slider_pos)
+        except OSError as e:
+            # Handle native C-level exceptions from libVLC gracefully
+            logging.warning(f"LibVLC state warning in update loop: {e}")
+        except Exception as e:
+            logging.error(f"Error in player state update loop: {e}")
 
     def format_time(self, seconds):
         h = int(seconds // 3600)
