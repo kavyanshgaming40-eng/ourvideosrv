@@ -297,8 +297,7 @@ class MainWindow(QMainWindow):
             '--quiet',
             '--video-title-show',
             '--no-video-title-show',
-            '--avcodec-hw=any', # Use hardware decoder
-            '--d3d11-hw-dec=1'  # Direct3D11 hardware acceleration
+            '--avcodec-hw=any'  # Use hardware decoder
         ]
         try:
             self.vlc_instance = vlc.Instance(args)
