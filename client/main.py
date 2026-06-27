@@ -764,15 +764,16 @@ class MainWindow(QMainWindow):
     def show_controls(self):
         self.control_bar_container.show()
         self.top_bar_container.show()
-        # Reset auto-hide timer if movie is playing
-        if self.is_playing:
+        # Reset auto-hide timer if movie is playing and in Fullscreen mode
+        if self.is_playing and self.isFullScreen():
             self.hide_timer.start()
         else:
             self.hide_timer.stop()
 
     def hide_controls(self):
-        # Only hide when playing and not fullscreen overlays (unless desired)
-        if self.is_playing:
+        # Only hide controls when playing AND in Fullscreen mode
+        # This keeps the layout perfectly stable in windowed mode
+        if self.is_playing and self.isFullScreen():
             self.control_bar_container.hide()
             self.top_bar_container.hide()
 
@@ -1115,6 +1116,10 @@ class MainWindow(QMainWindow):
         if self.sync_enabled and not self.block_outgoing_sync:
             self.network.send_sync("seek", target_sec)
             
+        # Re-enable slider update after a short delay (500ms) to let VLC seek settle
+        QTimer.singleShot(500, self.re_enable_slider_update)
+
+    def re_enable_slider_update(self):
         self.ignore_slider_update = False
 
     def update_player_state(self):
