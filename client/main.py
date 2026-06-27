@@ -174,7 +174,7 @@ class EmptyStateWidget(QWidget):
         
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(16)
+        layout.setSpacing(14)
         
         icon_label = QLabel("🍿")
         icon_label.setFont(QFont("Segoe UI", 56))
@@ -182,26 +182,33 @@ class EmptyStateWidget(QWidget):
         layout.addWidget(icon_label)
         
         title = QLabel("ourvideo")
-        title.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
-        title.setStyleSheet("color: #ffffff;")
+        title.setFont(QFont("Segoe UI", 28, QFont.Weight.Bold))
+        title.setStyleSheet("color: #ffffff; letter-spacing: 1px;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         
-        subtitle = QLabel("Synchronized cinema for two")
-        subtitle.setFont(QFont("Segoe UI", 12))
-        subtitle.setStyleSheet("color: #64748b;")
+        subtitle = QLabel("Distance is just a number • Sync movies, not your hearts 💜")
+        subtitle.setFont(QFont("Segoe UI", 12, QFont.Weight.Medium))
+        subtitle.setStyleSheet("color: #a78bfa;")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)
         
-        self.open_btn = QPushButton("Select Video File")
+        self.open_btn = QPushButton("🎬 Select Video File")
+        self.open_btn.setObjectName("selectBtn")
         self.open_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.open_btn.setStyleSheet("""
-            background-color: #5f3dc4;
-            color: white;
-            font-size: 13px;
-            font-weight: bold;
-            border-radius: 8px;
-            padding: 10px 24px;
+            QPushButton#selectBtn {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6e40c9, stop:1 #1f6feb);
+                color: white;
+                font-size: 14px;
+                font-weight: bold;
+                border-radius: 8px;
+                padding: 12px 28px;
+                border: none;
+            }
+            QPushButton#selectBtn:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8b5cf6, stop:1 #388bfd);
+            }
         """)
         self.open_btn.clicked.connect(parent.open_file if parent else lambda: None)
         
@@ -211,8 +218,8 @@ class EmptyStateWidget(QWidget):
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
         
-        self.info_label = QLabel("Or click the gear icon ⚙ at the bottom to connect to your partner")
-        self.info_label.setFont(QFont("Segoe UI", 11))
+        self.info_label = QLabel("Or click the gear icon ⚙ at the bottom to connect with your partner")
+        self.info_label.setFont(QFont("Segoe UI", 10))
         self.info_label.setStyleSheet("color: #475569;")
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.info_label)
@@ -258,20 +265,117 @@ class ClickableSlider(QSlider):
 class ConnectionDialog(QDialog):
     def __init__(self, parent, current_url, current_code):
         super().__init__(parent)
-        self.setWindowTitle("Settings & Connection")
+        self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedWidth(360)
-        self.setStyleSheet(parent.styleSheet())
+        
+        self.setStyleSheet("""
+            QDialog {
+                background-color: rgba(22, 27, 34, 0.98);
+                border: 1px solid #30363d;
+                border-radius: 12px;
+            }
+            QLabel {
+                color: #c9d1d9;
+                font-size: 12px;
+            }
+            QLineEdit {
+                background-color: #0d1117;
+                border: 1px solid #30363d;
+                border-radius: 6px;
+                padding: 7px;
+                color: #c9d1d9;
+                font-size: 12px;
+            }
+            QLineEdit:focus {
+                border-color: #58a6ff;
+            }
+            QPushButton {
+                background-color: #21262d;
+                border: 1px solid #30363d;
+                padding: 8px 12px;
+                border-radius: 6px;
+                color: #c9d1d9;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #30363d;
+                border-color: #8b949e;
+            }
+            QPushButton#connectBtn, QPushButton#joinBtn {
+                background-color: #238636;
+                border: 1px solid #2ea44f;
+                color: white;
+            }
+            QPushButton#connectBtn:hover, QPushButton#joinBtn:hover {
+                background-color: #2ea44f;
+            }
+            QPushButton#createBtn {
+                background-color: #1f6feb;
+                border: 1px solid #388bfd;
+                color: white;
+            }
+            QPushButton#createBtn:hover {
+                background-color: #388bfd;
+            }
+            QPushButton#closeBtn {
+                background-color: transparent;
+                color: #8b949e;
+                font-size: 15px;
+                font-weight: bold;
+                border: none;
+                padding: 0px;
+                margin: 0px;
+            }
+            QPushButton#closeBtn:hover {
+                color: #ef4444;
+            }
+        """)
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
         
+        # Header Row
+        header_layout = QHBoxLayout()
+        title_lbl = QLabel("<b>Settings & Connection</b>")
+        title_lbl.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        title_lbl.setStyleSheet("color: #58a6ff;")
+        
+        self.close_btn = QPushButton("✕")
+        self.close_btn.setObjectName("closeBtn")
+        self.close_btn.setFixedSize(24, 24)
+        self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.close_btn.clicked.connect(self.reject)
+        
+        header_layout.addWidget(title_lbl)
+        header_layout.addStretch()
+        header_layout.addWidget(self.close_btn)
+        layout.addLayout(header_layout)
+        
+        # Line separator
+        sep0 = QFrame()
+        sep0.setFrameShape(QFrame.Shape.HLine)
+        sep0.setFrameShadow(QFrame.Shadow.Sunken)
+        sep0.setStyleSheet("background-color: #30363d; max-height: 1px;")
+        layout.addWidget(sep0)
+
+        # Name settings
+        layout.addWidget(QLabel("<b>Your Display Name</b>"))
+        self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("Enter your name (e.g. Goku)...")
+        self.name_input.setText(getattr(parent, 'username', 'Goku'))
+        layout.addWidget(self.name_input)
+
         layout.addWidget(QLabel("<b>Server URL</b>"))
         self.url_input = QLineEdit(current_url)
         self.url_input.setPlaceholderText("https://ourvideosrv.onrender.com")
         layout.addWidget(self.url_input)
         
         self.connect_btn = QPushButton("Connect" if not parent.network.sio.connected else "Disconnect")
+        self.connect_btn.setObjectName("connectBtn")
+        self.connect_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.connect_btn.clicked.connect(self.handle_connection)
         layout.addWidget(self.connect_btn)
         
@@ -279,11 +383,13 @@ class ConnectionDialog(QDialog):
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
         sep.setFrameShadow(QFrame.Shadow.Sunken)
-        sep.setStyleSheet("background-color: #2e3047;")
+        sep.setStyleSheet("background-color: #30363d; max-height: 1px;")
         layout.addWidget(sep)
         
         layout.addWidget(QLabel("<b>Room Settings</b>"))
         self.create_btn = QPushButton("Create Room (Get Code)")
+        self.create_btn.setObjectName("createBtn")
+        self.create_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.create_btn.setEnabled(parent.network.sio.connected)
         self.create_btn.clicked.connect(self.handle_create)
         layout.addWidget(self.create_btn)
@@ -295,6 +401,8 @@ class ConnectionDialog(QDialog):
         join_layout = QHBoxLayout()
         join_layout.addWidget(self.code_input)
         self.join_btn = QPushButton("Join Room")
+        self.join_btn.setObjectName("joinBtn")
+        self.join_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.join_btn.setEnabled(parent.network.sio.connected)
         self.join_btn.clicked.connect(self.handle_join)
         join_layout.addWidget(self.join_btn)
@@ -304,20 +412,26 @@ class ConnectionDialog(QDialog):
         self.parent_win = parent
         
     def handle_connection(self):
+        name = self.name_input.text().strip() or "Goku"
+        self.parent_win.username = name
         self.parent_win.server_url_input.setText(self.url_input.text().strip())
         self.parent_win.toggle_connection()
         # Small delay to let connection state update, then refresh button states
         QTimer.singleShot(800, self.update_states)
         
     def handle_create(self):
-        self.parent_win.network.create_room()
+        name = self.name_input.text().strip() or "Goku"
+        self.parent_win.username = name
+        self.parent_win.network.create_room(name)
         self.accept()
         
     def handle_join(self):
         code = self.code_input.text().strip()
+        name = self.name_input.text().strip() or "Goku"
+        self.parent_win.username = name
         if len(code) == 6 and code.isdigit():
             self.parent_win.room_code_input.setText(code)
-            self.parent_win.join_room()
+            self.parent_win.join_room(code, name)
             self.accept()
         else:
             QMessageBox.warning(self, "Input Error", "Please enter a valid 6-digit room code.")
@@ -337,7 +451,7 @@ class NetworkWorker(QObject):
     connected = pyqtSignal()
     disconnected = pyqtSignal()
     room_created = pyqtSignal(str, str)
-    room_joined = pyqtSignal(str, str)
+    room_joined = pyqtSignal(str, str, str)
     join_error = pyqtSignal(str)
     partner_disconnected = pyqtSignal(str)
     file_status = pyqtSignal(bool, str)
@@ -375,7 +489,7 @@ class NetworkWorker(QObject):
         @self.sio.on('room_joined')
         def on_room_joined(data):
             self.room_code = data.get("room_code")
-            self.room_joined.emit(self.room_code, data.get("status", ""))
+            self.room_joined.emit(self.room_code, data.get("status", ""), data.get("partner_name", ""))
 
         @self.sio.on('join_error')
         def on_join_error(data):
@@ -436,13 +550,13 @@ class NetworkWorker(QObject):
         if self.sio.connected:
             self.sio.disconnect()
 
-    def create_room(self):
+    def create_room(self, username="Host"):
         if self.sio.connected:
-            self.sio.emit('create_room')
+            self.sio.emit('create_room', {"username": username})
 
-    def join_room(self, code):
+    def join_room(self, code, username="Partner"):
         if self.sio.connected:
-            self.sio.emit('join_room', {"room_code": code})
+            self.sio.emit('join_room', {"room_code": code, "username": username})
 
     def send_file_info(self, filename, size, duration):
         if self.sio.connected:
@@ -550,6 +664,9 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence(Qt.Key.Key_S), self, self.on_shortcut_s)
         QShortcut(QKeySequence(Qt.Key.Key_Left), self, self.on_shortcut_left)
         QShortcut(QKeySequence(Qt.Key.Key_Right), self, self.on_shortcut_right)
+
+        # First launch welcome message
+        QTimer.singleShot(1500, lambda: self.show_toast("Welcome! Click ⚙️ to connect with your partner", 3000))
 
     def init_vlc(self):
         if not vlc:
@@ -934,10 +1051,9 @@ class MainWindow(QMainWindow):
             self.network.disconnect_server()
 
     def on_network_connected(self):
-        self.status_label.setText("Connected")
-        self.status_label.setStyleSheet("color: #eab308; font-weight: bold; font-size: 11px;")
-        self.top_status_label.setText("🟢 Connected")
-        self.top_status_label.setStyleSheet("color: #22c55e;")
+        self.status_label.setText("🟢 Online")
+        self.status_label.setStyleSheet("color: #22c55e; font-weight: bold; font-size: 11px;")
+        self.top_status_label.setText("")
         self.connect_btn.setText("Disconnect")
         self.create_room_btn.setEnabled(True)
         self.join_room_btn.setEnabled(True)
@@ -945,10 +1061,9 @@ class MainWindow(QMainWindow):
         self.show_toast("Connected to server!", 2000)
 
     def on_network_disconnected(self):
-        self.status_label.setText("Disconnected")
-        self.status_label.setStyleSheet("color: #ef4444; font-weight: bold; font-size: 11px;")
-        self.top_status_label.setText("🔴 Disconnected")
-        self.top_status_label.setStyleSheet("color: #ef4444;")
+        self.status_label.setText("⚫ Offline")
+        self.status_label.setStyleSheet("color: #8b949e; font-weight: bold; font-size: 11px;")
+        self.top_status_label.setText("")
         self.connect_btn.setText("Connect")
         self.create_room_btn.setEnabled(False)
         self.join_room_btn.setEnabled(False)
@@ -958,25 +1073,28 @@ class MainWindow(QMainWindow):
         self.show_toast("Disconnected from server", 2000)
 
     def on_room_created(self, code, status):
-        self.status_label.setText(f"Room: {code}")
-        self.status_label.setStyleSheet("color: #3b82f6; font-weight: bold; font-size: 11px;")
-        self.top_status_label.setText(f"🔵 Room: {code}")
-        self.top_status_label.setStyleSheet("color: #3b82f6;")
+        self.status_label.setText("🟢 Online")
+        self.status_label.setStyleSheet("color: #22c55e; font-weight: bold; font-size: 11px;")
+        self.top_status_label.setText(f"Room: {code} • Waiting for partner...")
+        self.top_status_label.setStyleSheet("color: #58a6ff; font-weight: bold;")
         self.room_code_input.setText(code)
         self.chat_display.append(f"<font color='#5f3dc4'>[System] Room created. Share code: {code}</font>")
         self.copy_room_btn.show()
         self.show_toast(f"Room {code} created!", 2500)
 
-    def on_room_joined(self, code, status):
-        self.status_label.setText(f"Room: {code}")
+    def on_room_joined(self, code, status, partner_name=""):
+        self.status_label.setText("🟢 Online")
         self.status_label.setStyleSheet("color: #22c55e; font-weight: bold; font-size: 11px;")
-        self.top_status_label.setText(f"🟢 Room: {code} (Connected)")
-        self.top_status_label.setStyleSheet("color: #22c55e;")
+        
+        display_partner = partner_name if partner_name else "Partner"
+        self.top_status_label.setText(f"Room: {code} • Watching with {display_partner} 💜")
+        self.top_status_label.setStyleSheet("color: #a78bfa; font-weight: bold;")
+        
         self.room_code_input.setText(code)
-        self.chat_display.append("<font color='#22c55e'>[System] Connected to partner.</font>")
+        self.chat_display.append(f"<font color='#22c55e'>[System] Connected with {display_partner}.</font>")
         self.sync_enabled = True
         self.copy_room_btn.show()
-        self.show_toast("Partner connected!", 2500)
+        self.show_toast(f"Connected with {display_partner}!", 2500)
         
         # Share file metadata if already loaded
         self.send_file_metadata()
