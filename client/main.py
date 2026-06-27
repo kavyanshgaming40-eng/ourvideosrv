@@ -225,17 +225,14 @@ class ClickableSlider(QSlider):
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.sliderPressed.emit()
-            self.update_value_from_pos(event.position())
-            # Emit sliderReleased immediately to perform the seek on single click
-            self.sliderReleased.emit()
+            self.update_value_from_pos(event.pos())
             event.accept()
         else:
             super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         if event.buttons() & Qt.MouseButton.LeftButton:
-            # Update position while dragging
-            self.update_value_from_pos(event.position())
+            self.update_value_from_pos(event.pos())
             event.accept()
         else:
             super().mouseMoveEvent(event)
