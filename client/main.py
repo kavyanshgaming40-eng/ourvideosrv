@@ -394,7 +394,7 @@ class NetworkWorker(QObject):
             self.server_url = url
             if self.sio.connected:
                 self.sio.disconnect()
-            self.sio.connect(url, wait_timeout=5)
+            self.sio.connect(url, wait_timeout=30)
         except Exception as e:
             logging.error(f"Connection failed: {e}")
             self.disconnected.emit()
