@@ -329,6 +329,8 @@ class NetworkWorker(QObject):
     sync_received = pyqtSignal(dict)
     latency_updated = pyqtSignal(float)
     chat_received = pyqtSignal(str, str)
+    playback_state_requested = pyqtSignal()
+    playback_state_received = pyqtSignal(dict)
 
     def __init__(self):
         super().__init__()
@@ -388,6 +390,22 @@ class NetworkWorker(QObject):
         @self.sio.on('chat_msg')
         def on_chat(data):
             self.chat_received.emit(data.get("sender", "Partner"), data.get("message", ""))
+
+        @self.sio.on('request_playback_state')
+        def on_request_state():
+            self.playback_state_requested.emit()
+
+        @self.sio.on('set_playback_state')
+        def on_set_state(data):
+            self.playback_state_received.emit(data)
+
+    def send_playback_state(self, current_time, is_playing):
+        if self.sio.connected and self.room_code:
+            self.sio.emit('report_playback_state', {
+                "time": float(current_time),
+                "is_playing": bool(is_playing),
+                "timestamp": time.time()
+            })
 
     def connect_server(self, url):
         try:
@@ -854,6 +872,8 @@ class MainWindow(QMainWindow):
         self.network.sync_received.connect(self.on_sync_received)
         self.network.latency_updated.connect(self.on_latency_updated)
         self.network.chat_received.connect(self.on_chat_received)
+        self.network.playback_state_requested.connect(self.on_playback_state_requested)
+        self.network.playback_state_received.connect(self.on_playback_state_received)
 
     def toggle_connection(self):
         if self.connect_btn.text() == "Connect":
@@ -918,6 +938,37 @@ class MainWindow(QMainWindow):
         
         # Share file metadata if already loaded
         self.send_file_metadata()
+
+    def on_playback_state_requested(self):
+        # We are the host (already in the room), report our current playback state to sync the newcomer
+        if self.media_player:
+            curr_sec = self.media_player.get_time() / 1000.0
+            if curr_sec < 0:
+                curr_sec = 0.0
+            self.network.send_playback_state(curr_sec, self.is_playing)
+
+    def on_playback_state_received(self, data):
+        # We just joined, receive the host's playback position and sync our player state
+        partner_time = data.get("time", 0.0)
+        partner_playing = data.get("is_playing", False)
+        partner_timestamp = data.get("timestamp", time.time())
+        
+        # Calculate latency compensation
+        elapsed = time.time() - partner_timestamp
+        compensated_time = partner_time + elapsed + self.network.latency
+        
+        logging.info(f"Initial catch-up sync received. Seeks to: {compensated_time:.3f}s. Playing={partner_playing}")
+        
+        self.block_outgoing_sync = True
+        try:
+            self.media_player.set_time(int(compensated_time * 1000.0))
+            if partner_playing:
+                self.start_playback()
+            else:
+                self.pause_playback()
+            self.show_toast("Synced to partner's movie position!", 3000)
+        finally:
+            QTimer.singleShot(1000, self.unblock_sync)
 
     def on_join_error(self, message):
         QMessageBox.warning(self, "Room Error", message)
