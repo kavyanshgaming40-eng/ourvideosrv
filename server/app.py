@@ -84,6 +84,10 @@ def handle_join_room(data):
         "room_code": room_code,
         "status": "Partner Connected"
     }, to=room_code)
+    
+    # Request the host (first user) to report their current playback state
+    host_sid = room["users"][0]
+    emit('request_playback_state', {}, to=host_sid)
 
 @socketio.on('file_info')
 def handle_file_info(data):
@@ -137,6 +141,16 @@ def handle_sync_event(data):
         
     # Broadcast to everyone else in the room
     emit('sync_receive', data, to=room_code, include_self=False)
+
+@socketio.on('report_playback_state')
+def handle_report_playback_state(data):
+    sid = request.sid
+    room_code = SID_TO_ROOM.get(sid)
+    if not room_code or room_code not in ROOMS:
+        return
+    # Forward the host's state to the newly joined partner
+    emit('set_playback_state', data, to=room_code, include_self=False)
+
 
 @socketio.on('disconnect')
 def handle_disconnect():
